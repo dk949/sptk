@@ -1,7 +1,6 @@
+use crate::error::*;
+use crate::file_io;
 use std::env;
-use std::fs;
-use std::io;
-use std::io::prelude::*;
 
 struct Args {
     pub program: Option<String>,
@@ -18,7 +17,7 @@ fn version() -> ! {
     //process::exit(0)
 }
 
-fn parse() -> io::Result<Args> {
+fn parse() -> StringResult<Args> {
     let mut args = Args {
         program: None,
         input: None,
@@ -33,11 +32,12 @@ fn parse() -> io::Result<Args> {
                 "-v" | "--version" => version(),
                 "-f" | "--file" => {
                     if args.program.is_none() {
-                        args.program = Some(fs::read_to_string(
-                            iter.next().expect("expected file name after -f|--file"),
-                        )?);
+                        args.program =
+                            Some(file_io::read_to_string(iter.next().into_string_result(
+                                "expected file name after -f|--file".to_string(),
+                            )?)?);
                     } else {
-                        panic!("too many programs");
+                        return Err("too many programs".to_string());
                     }
                 }
                 s => {
@@ -45,9 +45,9 @@ fn parse() -> io::Result<Args> {
                         args.program = Some(s.to_string());
                     } else {
                         if args.input.is_none() {
-                            args.input = Some(fs::read_to_string(s)?)
+                            args.input = Some(file_io::read_to_string(s)?)
                         } else {
-                            panic!("Too many input files");
+                            return Err("Too many input files".to_string());
                         }
                     }
                 }
@@ -57,25 +57,21 @@ fn parse() -> io::Result<Args> {
         }
     }
     if args.program.is_none() {
-        panic!("No program provided");
+        Err("No program provided".to_string())
+    } else {
+        Ok(args)
     }
-    return Ok(args);
 }
 
-fn get_input() -> io::Result<String> {
-    let mut buf = vec![];
-    io::stdin().read_to_end(&mut buf)?;
-    String::from_utf8(buf).or(Err(io::Error::from(io::ErrorKind::Other)))
-}
-
-pub fn input_and_program() -> io::Result<(String, String)> {
+pub fn get_input_and_program() -> StringResult<(String, String)> {
     let args = parse()?;
     Ok((
         if let Some(input) = args.input {
             input
         } else {
-            get_input()?
+            file_io::get_input()?
         },
-        args.program.expect("Internal error: no program found"),
+        args.program
+            .into_string_result("Internal error: no program found".to_string())?,
     ))
 }
