@@ -1,1 +1,12 @@
+# Nix
+result
+result-*
+.direnv/
+
+# Editor
+.vscode/
+.idea/
+
+# Rust
 /target
+.envrc
