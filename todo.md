@@ -81,3 +81,5 @@
 - [x] Automated nix build and run
     - Make sure project can be built and smoke tested with nix
 - [x] Automated release when new tag pushed
+- [x] Fix nix caching
+    - Magic nix cache seems broken
