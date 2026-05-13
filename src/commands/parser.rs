@@ -1,6 +1,6 @@
 use regex::Regex;
 
-use crate::commands::Result;
+use crate::commands::{Parser, Result};
 
 pub fn skip(inp: &str) -> &str {
     // TODO(dk949): skip comments
@@ -107,6 +107,17 @@ fn escape_str(inp: &str) -> Result<String> {
         St::Start => Ok(out),
         St::Escape => Err("Trailing escape".into()),
     }
+}
+
+pub fn make_err<R, P: Parser>(loc: &str, msg: &str) -> Result<R> {
+    let preview = loc
+        .chars()
+        .next()
+        .map_or_else(|| "EOF".into(), |c| format!("`{c}`"));
+    Err(format!(
+        "Failed to parse {} args at {preview}: {msg}",
+        P::CHAR
+    ))
 }
 
 #[cfg(test)]

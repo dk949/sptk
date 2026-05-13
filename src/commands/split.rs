@@ -2,7 +2,7 @@ use regex::Regex;
 
 use crate::commands::{
     Executor, Parser, Result, Value,
-    parser::{regex_lit, skip, str_lit},
+    parser::{make_err, regex_lit, skip, str_lit},
 };
 
 pub enum On {
@@ -27,15 +27,12 @@ impl Parser for Split {
             let (r, next) = res?;
             return Ok((Split { on: On::Regex(r) }, next));
         }
-        let preview = inp.chars().next().map_or(String::new(), |c| c.to_string());
-        Err(format!(
-            "Failed to parse S args at {preview:?}: expected \"string\" or /regex/"
-        ))
+        make_err::<_, Split>(inp, "Expected \"string\" or /regex/")
     }
 }
 
 impl Executor for Split {
-    fn apply(&self, s: &str) -> Result<Value> {
+    fn apply_str(&self, s: &str) -> Option<Result<Value>> {
         let parts: Vec<Value> = match &self.on {
             On::String(sep) => s
                 .split(sep.as_str())
@@ -43,7 +40,7 @@ impl Executor for Split {
                 .collect(),
             On::Regex(r) => r.split(s).map(|x| Value::String(x.to_owned())).collect(),
         };
-        Ok(Value::List(parts))
+        Some(Ok(Value::List(parts)))
     }
 }
 
@@ -70,25 +67,26 @@ mod tests {
         assert!(Split::parse("xyz").is_err());
     }
 
+    fn strs_of(v: Value) -> Vec<String> {
+        match v {
+            Value::List(items) => items
+                .into_iter()
+                .map(|x| match x {
+                    Value::String(s) => s,
+                    _ => panic!("inner not String"),
+                })
+                .collect(),
+            _ => panic!("expected List"),
+        }
+    }
+
     #[test]
     fn apply_string() {
         let s = Split {
             on: On::String(" ".into()),
         };
-        let out = s.apply("foo bar baz").unwrap();
-        match out {
-            Value::List(v) => {
-                let strs: Vec<&str> = v
-                    .iter()
-                    .map(|x| match x {
-                        Value::String(s) => s.as_str(),
-                        _ => panic!("inner not String"),
-                    })
-                    .collect();
-                assert_eq!(strs, vec!["foo", "bar", "baz"]);
-            }
-            _ => panic!("expected List"),
-        }
+        let out = s.apply_str("foo bar baz").unwrap().unwrap();
+        assert_eq!(strs_of(out), vec!["foo", "bar", "baz"]);
     }
 
     #[test]
@@ -96,19 +94,15 @@ mod tests {
         let s = Split {
             on: On::Regex(Regex::new("\\s+").unwrap()),
         };
-        let out = s.apply("a  b   c").unwrap();
-        match out {
-            Value::List(v) => {
-                let strs: Vec<&str> = v
-                    .iter()
-                    .map(|x| match x {
-                        Value::String(s) => s.as_str(),
-                        _ => panic!(),
-                    })
-                    .collect();
-                assert_eq!(strs, vec!["a", "b", "c"]);
-            }
-            _ => panic!("expected List"),
-        }
+        let out = s.apply_str("a  b   c").unwrap().unwrap();
+        assert_eq!(strs_of(out), vec!["a", "b", "c"]);
+    }
+
+    #[test]
+    fn does_not_accept_list() {
+        let s = Split {
+            on: On::String(" ".into()),
+        };
+        assert!(s.apply_list(&[]).is_none());
     }
 }
