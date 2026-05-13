@@ -41,9 +41,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-          fetch-tags: true
       - uses: actions/download-artifact@v5
         with:
           path: dist
@@ -52,6 +49,7 @@ jobs:
         id: tag
         run: |
           tag="${{ github.ref_name }}"
+          git fetch --force origin "+refs/tags/${tag}:refs/tags/${tag}"
           {
             echo "subject<<EOF"
             git tag -l --format='%(contents:subject)' "$tag"
@@ -60,6 +58,10 @@ jobs:
             git tag -l --format='%(contents:body)' "$tag"
             echo EOF
           } >> "$GITHUB_OUTPUT"
+      - name: Delete pre-existing release for this tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release delete "${{ github.ref_name }}" --yes --repo "${{ github.repository }}" 2>/dev/null || true
       - uses: softprops/action-gh-release@v2
         with:
           files: dist/*.tar.gz
