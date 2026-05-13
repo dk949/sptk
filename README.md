@@ -1,5 +1,7 @@
 # sptk
 
+[![CI](https://github.com/dk949/sptk/actions/workflows/ci.yml/badge.svg)](https://github.com/dk949/sptk/actions/workflows/ci.yml)
+
 **String Processing Tool Kit**. A small CLI language for string
 manipulation, inspired by awk and sed.
 

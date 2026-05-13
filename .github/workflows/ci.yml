@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [trunk]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cargo:
+    name: cargo (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo build --verbose
+      - run: cargo test --verbose
+
+  nix:
+    name: nix (x86_64-linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+      - uses: DeterminateSystems/magic-nix-cache-action@main
+      - run: nix flake check
+      - run: nix build
+      - name: Smoke test
+        run: |
+          out=$(printf 'a,b,c' | ./result/bin/sptk 'S","J"-"')
+          if [ "$out" != "a-b-c" ]; then
+            echo "smoke test failed: got '$out', expected 'a-b-c'"
+            exit 1
+          fi

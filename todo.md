@@ -77,7 +77,7 @@
 
 ## CI
 
-- [ ] Automated build + test
-- [ ] Automated nix build and run
+- [x] Automated build + test
+- [x] Automated nix build and run
     - Make sure project can be built and smoke tested with nix
-- [ ] Automated release when new tag pushed
+- [x] Automated release when new tag pushed
