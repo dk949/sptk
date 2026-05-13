@@ -29,7 +29,7 @@ jobs:
         run: |
           mkdir -p dist
           tar czf "dist/sptk-${{ matrix.target }}.tar.gz" -C target/release sptk
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v7
         with:
           name: sptk-${{ matrix.target }}
           path: dist/sptk-${{ matrix.target }}.tar.gz
@@ -41,7 +41,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v8
         with:
           path: dist
           merge-multiple: true
@@ -62,7 +62,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release delete "${{ github.ref_name }}" --yes --repo "${{ github.repository }}" 2>/dev/null || true
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           files: dist/*.tar.gz
           name: ${{ steps.tag.outputs.subject }}
