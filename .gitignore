@@ -10,3 +10,7 @@ result-*
 # Rust
 /target
 .envrc
+
+# Misc
+
+todo.md
