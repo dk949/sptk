@@ -17,8 +17,6 @@ jobs:
         include:
           - target: linux-x86_64
             runner: ubuntu-latest
-          - target: macos-x86_64
-            runner: macos-13
           - target: macos-aarch64
             runner: macos-latest
     steps:
