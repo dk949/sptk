@@ -42,12 +42,28 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
       - uses: actions/download-artifact@v4
         with:
           path: dist
           merge-multiple: true
+      - name: Read tag message
+        id: tag
+        run: |
+          tag="${{ github.ref_name }}"
+          {
+            echo "subject<<EOF"
+            git tag -l --format='%(contents:subject)' "$tag"
+            echo EOF
+            echo "body<<EOF"
+            git tag -l --format='%(contents:body)' "$tag"
+            echo EOF
+          } >> "$GITHUB_OUTPUT"
       - uses: softprops/action-gh-release@v2
         with:
           files: dist/*.tar.gz
-          generate_release_notes: true
+          name: ${{ steps.tag.outputs.subject }}
+          body: ${{ steps.tag.outputs.body }}
           fail_on_unmatched_files: true
