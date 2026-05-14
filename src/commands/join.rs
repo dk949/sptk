@@ -26,7 +26,9 @@ impl Executor for Join {
         for item in items {
             match item {
                 Value::String(s) => parts.push(s),
-                Value::List(_) => return Some(Err("J: list element is not a String".into())),
+                Value::List(_) | Value::Int(_) | Value::Float(_) => {
+                    return Some(Err("J: list element is not a String".into()));
+                }
             }
         }
         Some(Ok(Value::String(parts.join(&self.on))))

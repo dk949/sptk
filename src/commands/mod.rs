@@ -1,10 +1,11 @@
 pub mod join;
+pub mod number;
 pub mod parser;
 pub mod split;
 
 use split::Split;
 
-use crate::commands::join::Join;
+use crate::commands::{join::Join, number::Number};
 
 pub type Error = String;
 pub type Result<T> = std::result::Result<T, Error>;
@@ -13,6 +14,8 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub enum Value {
     String(String),
     List(Vec<Value>),
+    Int(i64),
+    Float(f64),
 }
 
 #[derive(Debug)]
@@ -55,6 +58,12 @@ pub trait Executor {
     fn apply_list(&self, _items: &[Value]) -> Option<Result<Value>> {
         None
     }
+    fn apply_int(&self, _n: i64) -> Option<Result<Value>> {
+        None
+    }
+    fn apply_float(&self, _n: f64) -> Option<Result<Value>> {
+        None
+    }
 }
 
 pub type Pipeline = Vec<Command>;
@@ -82,6 +91,16 @@ macro_rules! cmds {
                     $( Command::$ty(inner) => inner.apply_list(items), )+
                 }
             }
+            fn apply_int(&self, n: i64) -> Option<Result<Value>> {
+                match self {
+                    $( Command::$ty(inner) => inner.apply_int(n), )+
+                }
+            }
+            fn apply_float(&self, n: f64) -> Option<Result<Value>> {
+                match self {
+                    $( Command::$ty(inner) => inner.apply_float(n), )+
+                }
+            }
         }
 
         pub fn parse_dispatch(ch: char, rest: &str)
@@ -96,7 +115,7 @@ macro_rules! cmds {
     };
 }
 
-cmds! { Split, Join }
+cmds! { Split, Join, Number }
 
 pub fn apply_to_value(cmd: &Command, v: &Value) -> Result<Value> {
     match v {
@@ -119,6 +138,33 @@ pub fn apply_to_value(cmd: &Command, v: &Value) -> Result<Value> {
                 .map(|item| apply_to_value(cmd, item))
                 .collect::<Result<Vec<_>>>()
                 .map(Value::List)
+        }
+        Value::Int(n) => {
+            if let Some(res) = cmd.apply_int(*n) {
+                return res;
+            }
+            if let Some(res) = cmd.apply_float(*n as f64) {
+                return res;
+            }
+            if let Some(res) = cmd.apply_str(&n.to_string()) {
+                return res;
+            }
+            Err("Cmd does not accept Int input".into())
+        }
+        Value::Float(n) => {
+            if let Some(res) = cmd.apply_float(*n) {
+                return res;
+            }
+            let as_int = *n as i64;
+            if (as_int as f64) == *n
+                && let Some(res) = cmd.apply_int(as_int)
+            {
+                return res;
+            }
+            if let Some(res) = cmd.apply_str(&n.to_string()) {
+                return res;
+            }
+            Err("Cmd does not accept Float input".into())
         }
     }
 }
@@ -190,6 +236,33 @@ mod tests {
                     .collect::<Result<Vec<_>>>()
                     .map(Value::List)
             }
+            Value::Int(n) => {
+                if let Some(res) = cmd.apply_int(*n) {
+                    return res;
+                }
+                if let Some(res) = cmd.apply_float(*n as f64) {
+                    return res;
+                }
+                if let Some(res) = cmd.apply_str(&n.to_string()) {
+                    return res;
+                }
+                Err("neither".into())
+            }
+            Value::Float(n) => {
+                if let Some(res) = cmd.apply_float(*n) {
+                    return res;
+                }
+                let as_int = *n as i64;
+                if (as_int as f64) == *n
+                    && let Some(res) = cmd.apply_int(as_int)
+                {
+                    return res;
+                }
+                if let Some(res) = cmd.apply_str(&n.to_string()) {
+                    return res;
+                }
+                Err("neither".into())
+            }
         }
     }
 
@@ -236,5 +309,99 @@ mod tests {
         struct Neither;
         impl Executor for Neither {}
         assert!(drive(&Neither, &s("x")).is_err());
+    }
+
+    // coercion ------------------------------------------------------------
+
+    // Cmd that only accepts strings — used to test Int/Float → str coercion.
+    struct StrOnly;
+    impl Executor for StrOnly {
+        fn apply_str(&self, s: &str) -> Option<Result<Value>> {
+            Some(Ok(Value::String(s.to_owned())))
+        }
+    }
+
+    // Cmd that only accepts floats — used to test Int → float widening.
+    struct FloatOnly;
+    impl Executor for FloatOnly {
+        fn apply_float(&self, n: f64) -> Option<Result<Value>> {
+            Some(Ok(Value::Float(n)))
+        }
+    }
+
+    // Cmd that only accepts ints — used to test Float → int narrowing.
+    struct IntOnly;
+    impl Executor for IntOnly {
+        fn apply_int(&self, n: i64) -> Option<Result<Value>> {
+            Some(Ok(Value::Int(n)))
+        }
+    }
+
+    // Cmd accepting both int and str — to test that non-integral Float
+    // skips apply_int and falls through to apply_str.
+    struct IntAndStr;
+    impl Executor for IntAndStr {
+        fn apply_int(&self, n: i64) -> Option<Result<Value>> {
+            Some(Ok(Value::Int(n)))
+        }
+        fn apply_str(&self, s: &str) -> Option<Result<Value>> {
+            Some(Ok(Value::String(s.to_owned())))
+        }
+    }
+
+    #[test]
+    fn coerce_int_to_str() {
+        let out = drive(&StrOnly, &Value::Int(42)).unwrap();
+        assert!(eq(&out, &s("42")));
+    }
+
+    #[test]
+    fn coerce_float_to_str() {
+        let out = drive(&StrOnly, &Value::Float(1.5)).unwrap();
+        assert!(eq(&out, &s("1.5")));
+    }
+
+    #[test]
+    fn coerce_int_to_float() {
+        let out = drive(&FloatOnly, &Value::Int(7)).unwrap();
+        assert!(matches!(out, Value::Float(x) if x == 7.0));
+    }
+
+    #[test]
+    fn coerce_integral_float_to_int() {
+        let out = drive(&IntOnly, &Value::Float(2.0)).unwrap();
+        assert!(matches!(out, Value::Int(2)));
+    }
+
+    #[test]
+    fn non_integral_float_to_int_only_errors() {
+        // IntOnly has no apply_str fallback; 2.5 is non-integral → error.
+        assert!(drive(&IntOnly, &Value::Float(2.5)).is_err());
+    }
+
+    #[test]
+    fn non_integral_float_falls_through_to_str() {
+        // IntAndStr accepts both; 2.5 is non-integral so apply_int is skipped,
+        // apply_str gets "2.5".
+        let out = drive(&IntAndStr, &Value::Float(2.5)).unwrap();
+        assert!(eq(&out, &s("2.5")));
+    }
+
+    #[test]
+    fn integral_float_prefers_int_over_str() {
+        // IntAndStr: 2.0 is integral → apply_int wins.
+        let out = drive(&IntAndStr, &Value::Float(2.0)).unwrap();
+        assert!(matches!(out, Value::Int(2)));
+    }
+
+    #[test]
+    fn huge_float_not_narrowed_to_int() {
+        // 1e20 exceeds i64 range; roundtrip check rejects narrowing, falls
+        // through to apply_str.
+        let out = drive(&IntAndStr, &Value::Float(1e20)).unwrap();
+        match out {
+            Value::String(got) => assert_eq!(got, (1e20_f64).to_string()),
+            _ => panic!("expected stringified float"),
+        }
     }
 }

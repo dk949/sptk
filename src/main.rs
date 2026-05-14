@@ -70,7 +70,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let state = run_commands(pipeline, data)?;
     let mut s = match state.into_last() {
         Value::String(s) => s,
-        Value::List(_) => {
+        Value::List(_) | Value::Int(_) | Value::Float(_) => {
             return Err("output is not a string; render cmd not yet implemented".into());
         }
     };

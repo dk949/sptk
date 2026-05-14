@@ -18,6 +18,10 @@
 ## Commands
 - [x] `S` Split: str arg or regex arg; str → list
 - [x] `J` Join: str sep; list-of-strings → string
+- [ ] `n` Number: parse str → Int/Float
+    - [x] Sketch: f/i/h/o/b strict, F/I/H/O/B partial (zero on no match);
+          optional base prefix; signs only for f/i
+    - [ ] Decide rendering / further-cmd interaction for Int/Float values
 
 ## Parser primitives
 - [x] `str_lit` (escape decoding via two-stage `delimited` + `escape_str`)
