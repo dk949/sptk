@@ -1,3 +1,4 @@
+pub mod debug;
 pub mod join;
 pub mod number;
 pub mod parser;
@@ -5,7 +6,7 @@ pub mod split;
 
 use split::Split;
 
-use crate::commands::{join::Join, number::Number};
+use crate::commands::{debug::Dbg, join::Join, number::Number};
 
 pub type Error = String;
 pub type Result<T> = std::result::Result<T, Error>;
@@ -49,6 +50,12 @@ pub trait Parser: Sized {
 }
 
 pub trait Executor {
+    /// If `Some`, the framework uses this result and skips all shape dispatch +
+    /// leaf-mapping. For cmds that want to see the whole Value verbatim
+    /// (e.g. structural debug).
+    fn apply(&self, _v: &Value) -> Option<Result<Value>> {
+        None
+    }
     /// Default `None` = cmd does not accept this shape. The framework then tries
     /// the other variants and/or promotes (String → List<char>) before giving up.
     /// `Some(Ok|Err)` = cmd accepts the shape and ran (successfully or not).
@@ -81,6 +88,11 @@ macro_rules! cmds {
         )+
 
         impl Executor for Command {
+            fn apply(&self, v: &Value) -> Option<Result<Value>> {
+                match self {
+                    $( Command::$ty(inner) => inner.apply(v), )+
+                }
+            }
             fn apply_str(&self, s: &str) -> Option<Result<Value>> {
                 match self {
                     $( Command::$ty(inner) => inner.apply_str(s), )+
@@ -115,9 +127,12 @@ macro_rules! cmds {
     };
 }
 
-cmds! { Split, Join, Number }
+cmds! { Split, Join, Number, Dbg }
 
 pub fn apply_to_value(cmd: &Command, v: &Value) -> Result<Value> {
+    if let Some(res) = cmd.apply(v) {
+        return res;
+    }
     match v {
         Value::String(s) => {
             if let Some(res) = cmd.apply_str(s) {

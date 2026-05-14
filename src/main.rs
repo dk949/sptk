@@ -3,7 +3,7 @@ use std::error::Error;
 use clap::Parser;
 
 use crate::{
-    commands::{Pipeline, State, Value, apply_to_value, parse_dispatch},
+    commands::{Pipeline, State, Value, apply_to_value, debug, parse_dispatch},
     io::{read_file, strip_trailing_newline, write_file},
 };
 
@@ -30,6 +30,10 @@ struct Cli {
     /// Don't strip a trailing newline from input or append one on output.
     #[arg(long)]
     raw: bool,
+
+    /// Debug-print the final pipeline value (any shape) instead of requiring a String.
+    #[arg(short, long)]
+    debug: bool,
 }
 
 fn parse_commands(input: &str) -> Result<Pipeline, commands::Error> {
@@ -68,7 +72,14 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     let pipeline = parse_commands(&cli.program)?;
     let state = run_commands(pipeline, data)?;
-    let mut s = match state.into_last() {
+    let final_value = state.into_last();
+    if cli.debug {
+        let mut buf = String::new();
+        debug::print(&final_value, &mut buf).expect("fmt::Write on String never fails");
+        write_file(&cli.output, &buf)?;
+        return Ok(());
+    }
+    let mut s = match final_value {
         Value::String(s) => s,
         Value::List(_) | Value::Int(_) | Value::Float(_) => {
             return Err("output is not a string; render cmd not yet implemented".into());

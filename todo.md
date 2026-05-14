@@ -22,6 +22,10 @@
     - [x] Sketch: f/i/h/o/b strict, F/I/H/O/B partial (zero on no match);
           optional base prefix; signs only for f/i
     - [ ] Decide rendering / further-cmd interaction for Int/Float values
+- [x] `_` Debug: print value to stderr, forward unchanged
+    - Adds `Executor::apply(&Value)` hook for whole-value passthrough
+    - YAML-style list format; string-escape `\\` `"` named controls,
+      `\xNN` for other ASCII controls + DEL, `\u{NNNN}` for C1 controls
 
 ## Parser primitives
 - [x] `str_lit` (escape decoding via two-stage `delimited` + `escape_str`)
@@ -39,6 +43,7 @@
 - [x] `-i/-o` input/output files (default `-` = stdin/stdout)
 - [x] Hard error when final value is non-String (until a render cmd lands)
 - [x] Flag to suppress automatic stripping of newline at end of input (see below)
+- [x] `-d`/`--debug` flag: debug-print final pipeline value (any shape)
 - [ ] Better error formatting/reporting
 
 ## Text pre/post processing
