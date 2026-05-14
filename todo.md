@@ -34,12 +34,14 @@
       receive a program)
 - [x] `-i/-o` input/output files (default `-` = stdin/stdout)
 - [x] Hard error when final value is non-String (until a render cmd lands)
-- [ ] Flag to suppress automatic stripping of newline at end of input (see below)
+- [x] Flag to suppress automatic stripping of newline at end of input (see below)
 - [ ] Better error formatting/reporting
 
 ## Text pre/post processing
 
-- [ ] By default, remove single trailing newline from input if present
+- [x] By default, remove single trailing newline from input if present
+    - Strips `\n` or `\r\n`; appends single `\n` on output (mirror).
+      `--raw` opts out of both.
 - [ ] Add automatic rendering no matter what the type of the final output is
     - [ ] This needs careful consideration for how lists will be formatted
     - [ ] Consider configurable output list format e.g. CSV, TSV

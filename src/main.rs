@@ -4,7 +4,7 @@ use clap::Parser;
 
 use crate::{
     commands::{Pipeline, State, Value, apply_to_value, parse_dispatch},
-    io::{read_file, write_file},
+    io::{read_file, strip_trailing_newline, write_file},
 };
 
 mod commands;
@@ -26,6 +26,10 @@ struct Cli {
 
     #[arg(short, long, value_name = "REGEX")]
     split_input: Option<String>,
+
+    /// Don't strip a trailing newline from input or append one on output.
+    #[arg(long)]
+    raw: bool,
 }
 
 fn parse_commands(input: &str) -> Result<Pipeline, commands::Error> {
@@ -57,15 +61,22 @@ fn run_commands(pipeline: Pipeline, input: String) -> Result<State, commands::Er
 
 fn main() -> Result<(), Box<dyn Error>> {
     let cli = Cli::parse();
-    let data = read_file(&cli.input)?;
+    let mut data = read_file(&cli.input)?;
+    if !cli.raw {
+        let trimmed = strip_trailing_newline(&data).len();
+        data.truncate(trimmed);
+    }
     let pipeline = parse_commands(&cli.program)?;
     let state = run_commands(pipeline, data)?;
-    let s = match state.into_last() {
+    let mut s = match state.into_last() {
         Value::String(s) => s,
         Value::List(_) => {
             return Err("output is not a string; render cmd not yet implemented".into());
         }
     };
+    if !cli.raw {
+        s.push('\n');
+    }
     write_file(&cli.output, &s)?;
     Ok(())
 }
