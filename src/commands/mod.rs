@@ -129,8 +129,10 @@ pub fn apply_to_value(cmd: &Command, v: &Value) -> Result<Value> {
                 .unwrap_or_else(|| Err("Cmd accepts neither String nor List input".into()))
         }
         Value::List(items) => {
-            let all_strings = items.iter().all(|i| matches!(i, Value::String(_)));
-            if all_strings && let Some(res) = cmd.apply_list(items) {
+            let all_leaves = items
+                .iter()
+                .all(|i| matches!(i, Value::String(_) | Value::Int(_) | Value::Float(_)));
+            if all_leaves && let Some(res) = cmd.apply_list(items) {
                 return res;
             }
             items
@@ -226,8 +228,10 @@ mod tests {
                     .unwrap_or_else(|| Err("neither".into()))
             }
             Value::List(items) => {
-                let all_strings = items.iter().all(|i| matches!(i, Value::String(_)));
-                if all_strings && let Some(res) = cmd.apply_list(items) {
+                let all_leaves = items
+                    .iter()
+                    .all(|i| matches!(i, Value::String(_) | Value::Int(_) | Value::Float(_)));
+                if all_leaves && let Some(res) = cmd.apply_list(items) {
                     return res;
                 }
                 items

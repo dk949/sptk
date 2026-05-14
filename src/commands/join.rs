@@ -1,3 +1,5 @@
+use std::fmt::Write;
+
 use crate::commands::{
     Executor, Parser, Result, Value,
     parser::{make_err, skip, str_lit},
@@ -22,16 +24,21 @@ impl Parser for Join {
 
 impl Executor for Join {
     fn apply_list(&self, items: &[Value]) -> Option<Result<Value>> {
-        let mut parts: Vec<&str> = Vec::with_capacity(items.len());
-        for item in items {
+        let mut out = String::new();
+        for (i, item) in items.iter().enumerate() {
+            if i > 0 {
+                out.push_str(&self.on);
+            }
             match item {
-                Value::String(s) => parts.push(s),
-                Value::List(_) | Value::Int(_) | Value::Float(_) => {
-                    return Some(Err("J: list element is not a String".into()));
+                Value::String(s) => out.push_str(s),
+                Value::Int(n) => write!(out, "{n}").unwrap(),
+                Value::Float(n) => write!(out, "{n}").unwrap(),
+                Value::List(_) => {
+                    return Some(Err("J: nested list cannot be joined".into()));
                 }
             }
         }
-        Some(Ok(Value::String(parts.join(&self.on))))
+        Some(Ok(Value::String(out)))
     }
 }
 
@@ -82,5 +89,31 @@ mod tests {
     fn does_not_accept_str() {
         let j = Join { on: "-".into() };
         assert!(j.apply_str("xyz").is_none());
+    }
+
+    #[test]
+    fn apply_list_stringifies_ints() {
+        let j = Join { on: " ".into() };
+        let out = j
+            .apply_list(&[Value::Int(1), Value::Int(2), Value::Int(3)])
+            .unwrap()
+            .unwrap();
+        match out {
+            Value::String(s) => assert_eq!(s, "1 2 3"),
+            _ => panic!("expected String"),
+        }
+    }
+
+    #[test]
+    fn apply_list_stringifies_mixed() {
+        let j = Join { on: ",".into() };
+        let out = j
+            .apply_list(&[Value::String("a".into()), Value::Int(2), Value::Float(3.5)])
+            .unwrap()
+            .unwrap();
+        match out {
+            Value::String(s) => assert_eq!(s, "a,2,3.5"),
+            _ => panic!("expected String"),
+        }
     }
 }
