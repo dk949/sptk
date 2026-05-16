@@ -1,6 +1,6 @@
 use regex::Regex;
 
-use crate::commands::{Parser, Result};
+use crate::commands::{ParseCtx, Parser, Result};
 
 pub fn skip(inp: &str) -> &str {
     // TODO(dk949): skip comments
@@ -29,6 +29,28 @@ pub fn int_lit(inp: &str) -> Option<Result<(usize, &str)>> {
             .map_err(|e| e.to_string())
             .map(|n| (n, rest)),
     )
+}
+
+/// Parse a `${digits}` pipeline-output reference (for cmd args).
+/// Returns `None` if input doesn't start with `${`; `Some(Err)` if the
+/// `${...}` syntax is malformed or the index would be a forward reference.
+pub fn pipeline_ref<'a>(inp: &'a str, ctx: &ParseCtx) -> Option<Result<(usize, &'a str)>> {
+    let rest = inp.strip_prefix("${")?;
+    let (n, after) = match int_lit(rest) {
+        Some(Ok(p)) => p,
+        Some(Err(e)) => return Some(Err(e)),
+        None => return Some(Err("expected digits after `${`".into())),
+    };
+    if n >= ctx.next_step {
+        return Some(Err(format!(
+            "cannot reference step {n}: only steps 0..{} exist at this point",
+            ctx.next_step
+        )));
+    }
+    let Some(closed) = after.strip_prefix('}') else {
+        return Some(Err("expected `}` to close `${...}`".into()));
+    };
+    Some(Ok((n, closed)))
 }
 
 pub fn regex_lit(inp: &str) -> Option<Result<(Regex, &str)>> {
@@ -262,6 +284,51 @@ mod tests {
     fn int_lit_overflow() {
         // Way past usize::MAX.
         assert!(int_lit("99999999999999999999999999999").unwrap().is_err());
+    }
+
+    // pipeline_ref --------------------------------------------------------
+
+    fn ctx(n: usize) -> ParseCtx {
+        ParseCtx { next_step: n }
+    }
+
+    #[test]
+    fn pipeline_ref_happy() {
+        let (n, rest) = pipeline_ref("${2}rest", &ctx(3)).unwrap().unwrap();
+        assert_eq!(n, 2);
+        assert_eq!(rest, "rest");
+    }
+
+    #[test]
+    fn pipeline_ref_zero_at_step_one() {
+        let (n, _) = pipeline_ref("${0}", &ctx(1)).unwrap().unwrap();
+        assert_eq!(n, 0);
+    }
+
+    #[test]
+    fn pipeline_ref_no_match() {
+        assert!(pipeline_ref("foo", &ctx(2)).is_none());
+        // `$1` (bare) is not a pipeline_ref; only `${...}` is.
+        assert!(pipeline_ref("$1", &ctx(2)).is_none());
+    }
+
+    #[test]
+    fn pipeline_ref_missing_digits() {
+        assert!(pipeline_ref("${}", &ctx(2)).unwrap().is_err());
+        assert!(pipeline_ref("${abc}", &ctx(2)).unwrap().is_err());
+    }
+
+    #[test]
+    fn pipeline_ref_missing_close() {
+        assert!(pipeline_ref("${1", &ctx(2)).unwrap().is_err());
+        assert!(pipeline_ref("${1 ", &ctx(2)).unwrap().is_err());
+    }
+
+    #[test]
+    fn pipeline_ref_forward_ref() {
+        assert!(pipeline_ref("${5}", &ctx(3)).unwrap().is_err());
+        // Self-ref: at step N, $N doesn't exist yet.
+        assert!(pipeline_ref("${1}", &ctx(1)).unwrap().is_err());
     }
 
     // regex_lit -----------------------------------------------------------

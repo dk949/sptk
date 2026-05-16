@@ -1,3 +1,5 @@
+pub mod arg;
+pub mod coerce;
 pub mod debug;
 pub mod join;
 pub mod number;
@@ -68,6 +70,15 @@ pub trait Executor {
     fn apply_pipeline(&self, _store: &StepStore) -> Option<Result<Value>> {
         None
     }
+    /// Resolve any `${N}` arg substitutions against the step store.
+    /// Returns `Some(self_with_subs_replaced)` if the cmd had `${N}` args,
+    /// `None` otherwise. Called before any `apply_*` dispatch.
+    fn resolve(&self, _store: &StepStore) -> Result<Option<Self>>
+    where
+        Self: Sized,
+    {
+        Ok(None)
+    }
     /// Whether this cmd advances the step counter. Defaults to `true`.
     /// `$` returns `false`: it replaces the current value but is not itself
     /// addressable.
@@ -118,6 +129,12 @@ macro_rules! cmds {
             fn apply_pipeline(&self, store: &StepStore) -> Option<Result<Value>> {
                 match self {
                     $( Command::$ty(inner) => inner.apply_pipeline(store), )+
+                }
+            }
+            fn resolve(&self, store: &StepStore) -> Result<Option<Self>> {
+                match self {
+                    $( Command::$ty(inner) =>
+                        Ok(inner.resolve(store)?.map(Command::$ty)), )+
                 }
             }
             fn produces_step(&self) -> bool {
@@ -181,8 +198,7 @@ pub fn apply_to_value(cmd: &Command, v: &Value) -> Result<Value> {
                 return res;
             }
             // Promote String → List of single-char Strings, then retry as list.
-            let chars: Vec<Value> = s.chars().map(|c| Value::String(c.to_string())).collect();
-            cmd.apply_list(&chars)
+            cmd.apply_list(&coerce::string_to_chars(s))
                 .unwrap_or_else(|| Err("Cmd accepts neither String nor List input".into()))
         }
         Value::List(items) => {
@@ -202,10 +218,10 @@ pub fn apply_to_value(cmd: &Command, v: &Value) -> Result<Value> {
             if let Some(res) = cmd.apply_int(*n) {
                 return res;
             }
-            if let Some(res) = cmd.apply_float(*n as f64) {
+            if let Some(res) = cmd.apply_float(coerce::int_to_float(*n)) {
                 return res;
             }
-            if let Some(res) = cmd.apply_str(&n.to_string()) {
+            if let Some(res) = cmd.apply_str(&coerce::int_to_str(*n)) {
                 return res;
             }
             Err("Cmd does not accept Int input".into())
@@ -214,13 +230,12 @@ pub fn apply_to_value(cmd: &Command, v: &Value) -> Result<Value> {
             if let Some(res) = cmd.apply_float(*n) {
                 return res;
             }
-            let as_int = *n as i64;
-            if (as_int as f64) == *n
+            if let Some(as_int) = coerce::float_to_int(*n)
                 && let Some(res) = cmd.apply_int(as_int)
             {
                 return res;
             }
-            if let Some(res) = cmd.apply_str(&n.to_string()) {
+            if let Some(res) = cmd.apply_str(&coerce::float_to_str(*n)) {
                 return res;
             }
             Err("Cmd does not accept Float input".into())
@@ -280,8 +295,7 @@ mod tests {
                 if let Some(res) = cmd.apply_str(s) {
                     return res;
                 }
-                let chars: Vec<Value> = s.chars().map(|c| Value::String(c.to_string())).collect();
-                cmd.apply_list(&chars)
+                cmd.apply_list(&coerce::string_to_chars(s))
                     .unwrap_or_else(|| Err("neither".into()))
             }
             Value::List(items) => {
@@ -301,10 +315,10 @@ mod tests {
                 if let Some(res) = cmd.apply_int(*n) {
                     return res;
                 }
-                if let Some(res) = cmd.apply_float(*n as f64) {
+                if let Some(res) = cmd.apply_float(coerce::int_to_float(*n)) {
                     return res;
                 }
-                if let Some(res) = cmd.apply_str(&n.to_string()) {
+                if let Some(res) = cmd.apply_str(&coerce::int_to_str(*n)) {
                     return res;
                 }
                 Err("neither".into())
@@ -313,13 +327,12 @@ mod tests {
                 if let Some(res) = cmd.apply_float(*n) {
                     return res;
                 }
-                let as_int = *n as i64;
-                if (as_int as f64) == *n
+                if let Some(as_int) = coerce::float_to_int(*n)
                     && let Some(res) = cmd.apply_int(as_int)
                 {
                     return res;
                 }
-                if let Some(res) = cmd.apply_str(&n.to_string()) {
+                if let Some(res) = cmd.apply_str(&coerce::float_to_str(*n)) {
                     return res;
                 }
                 Err("neither".into())

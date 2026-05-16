@@ -85,12 +85,14 @@ fn run_commands(pipeline: Pipeline, input: String) -> Result<State, commands::Er
     }
     let mut step = 0;
     for cmd in &pipeline {
-        let next = if let Some(res) = cmd.apply_pipeline(&store) {
+        let resolved = cmd.resolve(&store)?;
+        let cmd_ref: &commands::Command = resolved.as_ref().unwrap_or(cmd);
+        let next = if let Some(res) = cmd_ref.apply_pipeline(&store) {
             res?
         } else {
-            apply_to_value(cmd, &current)?
+            apply_to_value(cmd_ref, &current)?
         };
-        if cmd.produces_step() {
+        if cmd_ref.produces_step() {
             step += 1;
             if needed[step] {
                 store.set(step, next.clone());
@@ -196,5 +198,81 @@ mod tests {
         // Two `$` cmds referencing the same step: both load step 1's output.
         let out = run("S\" \" J \",\" $1 J \"-\" $1 J \"+\"", "a b c").unwrap();
         assert_eq!(as_str(out), "a+b+c");
+    }
+
+    // `${N}` arg substitution -------------------------------------
+
+    #[test]
+    fn arg_subst_join_with_string_step() {
+        // Step 0 = "-" (input). Step 1 = split into chars. Then J ${0}: use
+        // step 0's value as the sep.
+        // Use $0 + S to set things up: input is the sep, get a separate list.
+        // Simpler form: feed list-of-chars to a Join whose sep is ${0}.
+        // input = "-", S"" splits to chars "-", then $0 replaces with "-",
+        // then S"" again splits to chars again... too convoluted.
+        //
+        // Direct: S " " on "a b c" -> ["a","b","c"] (step 1). $0 puts back
+        // the original input "a b c" (a String). J ${0} on step 1 list?
+        // No — $0 made current value the string. Pipeline order matters.
+        //
+        // Cleanest: split input by spaces, then join with the original input
+        // string as the separator.
+        let out = run("S\" \" J ${0}", "X").unwrap();
+        // input "X" splits on space -> ["X"] (single elem), joining anything
+        // single-element produces just "X". Not interesting; use real input.
+        assert_eq!(as_str(out), "X");
+    }
+
+    #[test]
+    fn arg_subst_join_uses_step_output_as_sep() {
+        // Step 1 = J"-" on input split. Step 2 = J ${1} on step 1's output?
+        // J needs a list input. Step 1's output is a string. So Join can't
+        // apply to that. Use $1 to recover the list-of-tokens (output of S).
+        //
+        // Pipeline: S" " (step1=list) J"," (step2=string "a,b,c") $1 (back to
+        // list) J ${2} (join list with step 2's "a,b,c" as separator).
+        let out = run("S\" \" J\",\" $1 J ${2}", "a b c").unwrap();
+        assert_eq!(as_str(out), "aa,b,cba,b,cc");
+    }
+
+    #[test]
+    fn arg_subst_step_zero_as_sep() {
+        // $0 = original input. Use it as Join's separator after splitting.
+        let out = run("S\" \" J ${0}", "a b c").unwrap();
+        // Original input is "a b c"; sep is the whole "a b c".
+        assert_eq!(as_str(out), "aa b cba b cc");
+    }
+
+    #[test]
+    fn arg_subst_forward_ref_errors() {
+        // J ${1} as first cmd: only step 0 exists.
+        assert!(parse_commands("J ${1}").is_err());
+    }
+
+    #[test]
+    fn arg_subst_braces_required() {
+        // Bare $1 is NOT a Join arg (J only accepts "str" or ${N}).
+        // J $1 should fail to parse as a Join arg.
+        assert!(parse_commands("S\" \" J $1").is_err());
+    }
+
+    #[test]
+    fn arg_subst_string_in_quotes_is_literal() {
+        // "${1}" inside a string literal is just text, not interpolation.
+        // Pipeline: S" " J"${1}" on "a b c": uses literal "${1}" as sep.
+        let out = run("S\" \" J\"${1}\"", "a b c").unwrap();
+        assert_eq!(as_str(out), "a${1}b${1}c");
+    }
+
+    #[test]
+    fn arg_subst_list_to_string_errors() {
+        // J ${1} where step 1 is a List: coerce error at run time.
+        // S" " produces list, then J ${1} would try to coerce step 1 (list) to
+        // a string separator.
+        let err = run("S\" \" J ${1}", "a b c").unwrap_err();
+        assert!(
+            err.contains("List"),
+            "expected list-coerce error, got: {err}"
+        );
     }
 }
