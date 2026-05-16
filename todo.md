@@ -27,6 +27,44 @@
     - YAML-style list format; string-escape `\\` `"` named controls,
       `\xNN` for other ASCII controls + DEL, `\u{NNNN}` for C1 controls
 
+## Pipeline output references
+- [x] `$N` pipeline-subst cmd
+    - `$` does NOT count as a step itself; step numbering only counts
+      step-producing cmds (1-indexed, `$0` = original input)
+    - [x] `ParseCtx { next_step }` (read-only); extend `Parser::parse` sig;
+          update macro + existing cmds to accept (and ignore) ctx
+    - [x] `int_lit` parser primitive + tests
+    - [x] `Executor::produces_step` (default `true`); `$` overrides `false`
+    - [x] `StepStore` (only referenced slots populated)
+    - [x] `Command::refs` via macro; static pre-scan in runner
+    - [x] `Executor::apply_pipeline` hook
+    - [x] `$` cmd: parser, executor, registry
+    - [x] Forward-ref + too-large-ref parse errors (`n < ctx.next_step`)
+    - [x] E2E + unit tests
+- [x] Refactor existing coercion sites into `commands/coerce.rs`
+    - [x] Move `int_to_float` / `int_to_str` / `float_to_int` /
+          `float_to_str` / `string_to_chars` out of `apply_to_value`
+    - [x] `apply_to_value` calls the new helpers
+- [x] `${N}` arg substitution
+    - Brace form required (`${N}`); bare `$N` only as Phase 1 cmd.
+      No interpolation inside `"..."`. Refs must be int literals
+      (no nested `${${1}}`, no `$ ${1}`).
+    - [x] `Arg<T>` enum
+    - [x] `pipeline_ref` parser primitive (`${digits}`) + tests
+    - [x] Value-level coerce helpers in `coerce.rs`
+          (`to_string` / `to_int` / `to_float` / `to_regex`)
+    - [x] `Executor::resolve` hook (+ macro plumbing)
+    - [x] Uplift `Join` sep to `Arg<String>`
+    - [x] Uplift `Split` `On` variants to `Arg<_>`
+        - Data shape ready; parser still rejects bare `${N}` (no
+          string-vs-regex disambiguator yet)
+    - [ ] Disambiguation syntax for Split's `${N}` (string vs regex)
+    - [x] Unit + E2E tests
+- [ ] Warn when `$N` is the final cmd (or only `$N`s follow)
+    - `x 123 y 123 $1`: `y`'s output is discarded; only useful side-effect
+      cmds could justify this. Until impure cmds exist, print a warning.
+    - Revisit once impure cmds (side effects) land.
+
 ## Parser primitives
 - [x] `str_lit` (escape decoding via two-stage `delimited` + `escape_str`)
 - [x] `regex_lit`
