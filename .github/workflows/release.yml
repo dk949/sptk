@@ -8,8 +8,25 @@ permissions:
   contents: write
 
 jobs:
+  verify-version:
+    name: verify Cargo.toml matches tag
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Compare Cargo.toml version to tag
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          cargo_ver=$(awk -F'"' '/^version *=/ {print $2; exit}' Cargo.toml)
+          echo "tag=$tag cargo=$cargo_ver"
+          if [ "$tag" != "$cargo_ver" ]; then
+            echo "::error::Cargo.toml version ($cargo_ver) does not match tag ($GITHUB_REF_NAME)."
+            echo "::error::Use \`cargo release\` so the version bump, commit, and tag stay in lockstep."
+            exit 1
+          fi
+
   build:
     name: build (${{ matrix.target }})
+    needs: verify-version
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
