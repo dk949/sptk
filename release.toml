@@ -1,8 +1,6 @@
 allow-branch = ["trunk"]
 publish = false
 push = false
+tag = false
 sign-commit = true
-sign-tag = true
 pre-release-commit-message = "chore: release v{{version}}"
-tag-name = "v{{version}}"
-tag-message = "Release v{{version}}"
