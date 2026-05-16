@@ -1,7 +1,7 @@
 use std::fmt::{self, Write as _};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use crate::commands::{Executor, Parser, Result, Value};
+use crate::commands::{Executor, ParseCtx, Parser, Result, Value};
 
 static DBG_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
@@ -76,7 +76,7 @@ pub struct Dbg;
 
 impl Parser for Dbg {
     const CHAR: char = '_';
-    fn parse(inp: &str) -> Result<(Self, &str)> {
+    fn parse<'a>(inp: &'a str, _ctx: &ParseCtx) -> Result<(Self, &'a str)> {
         Ok((Dbg, inp))
     }
 }
@@ -202,7 +202,7 @@ mod tests {
 
     #[test]
     fn dbg_parse_takes_no_arg() {
-        let (_, rest) = Dbg::parse("rest").unwrap();
+        let (_, rest) = Dbg::parse("rest", &ParseCtx::new()).unwrap();
         assert_eq!(rest, "rest");
     }
 

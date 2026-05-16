@@ -1,7 +1,7 @@
 use regex::Regex;
 
 use crate::commands::{
-    Executor, Parser, Result, Value,
+    Executor, ParseCtx, Parser, Result, Value,
     parser::{make_err, regex_lit, skip, str_lit},
 };
 
@@ -17,7 +17,7 @@ pub struct Split {
 impl Parser for Split {
     const CHAR: char = 'S';
 
-    fn parse(inp: &str) -> Result<(Self, &str)> {
+    fn parse<'a>(inp: &'a str, _ctx: &ParseCtx) -> Result<(Self, &'a str)> {
         let inp = skip(inp);
         if let Some(res) = str_lit(inp) {
             let (s, next) = res?;
@@ -50,21 +50,21 @@ mod tests {
 
     #[test]
     fn parse_string_arg() {
-        let (s, rest) = Split::parse("\" \"after").unwrap();
+        let (s, rest) = Split::parse("\" \"after", &ParseCtx::new()).unwrap();
         assert!(matches!(s.on, On::String(ref x) if x == " "));
         assert_eq!(rest, "after");
     }
 
     #[test]
     fn parse_regex_arg() {
-        let (s, rest) = Split::parse("/\\s+/after").unwrap();
+        let (s, rest) = Split::parse("/\\s+/after", &ParseCtx::new()).unwrap();
         assert!(matches!(s.on, On::Regex(_)));
         assert_eq!(rest, "after");
     }
 
     #[test]
     fn parse_missing_arg() {
-        assert!(Split::parse("xyz").is_err());
+        assert!(Split::parse("xyz", &ParseCtx::new()).is_err());
     }
 
     fn strs_of(v: Value) -> Vec<String> {

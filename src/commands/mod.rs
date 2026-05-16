@@ -2,11 +2,15 @@ pub mod debug;
 pub mod join;
 pub mod number;
 pub mod parser;
+pub mod pipe_ref;
 pub mod split;
+pub mod store;
 
 use split::Split;
 
-use crate::commands::{debug::Dbg, join::Join, number::Number};
+use crate::commands::{
+    debug::Dbg, join::Join, number::Number, pipe_ref::PipeRef, store::StepStore,
+};
 
 pub type Error = String;
 pub type Result<T> = std::result::Result<T, Error>;
@@ -25,18 +29,8 @@ pub struct State {
 }
 
 impl State {
-    pub fn new(s: String) -> Self {
-        Self {
-            last: Value::String(s),
-        }
-    }
-
-    pub fn push(&mut self, v: Value) {
-        self.last = v;
-    }
-
-    pub fn last(&self) -> &Value {
-        &self.last
+    pub fn new(v: Value) -> Self {
+        Self { last: v }
     }
 
     pub fn into_last(self) -> Value {
@@ -44,12 +38,45 @@ impl State {
     }
 }
 
+/// Parse-time context. Carries the step index the next step-producing cmd
+/// will receive (1-based). Lets `$N` validate that `N < next_step`.
+pub struct ParseCtx {
+    pub next_step: usize,
+}
+
+impl ParseCtx {
+    pub fn new() -> Self {
+        Self { next_step: 1 }
+    }
+}
+
+impl Default for ParseCtx {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 pub trait Parser: Sized {
     const CHAR: char;
-    fn parse(inp: &str) -> Result<(Self, &str)>;
+    fn parse<'a>(inp: &'a str, ctx: &ParseCtx) -> Result<(Self, &'a str)>;
 }
 
 pub trait Executor {
+    /// Pipeline-level hook. If `Some`, the runner uses this result and skips
+    /// the value-shape dispatch entirely. The cmd reads the prior step
+    /// outputs from `StepStore`. Used by `$` (pipeline subst).
+    fn apply_pipeline(&self, _store: &StepStore) -> Option<Result<Value>> {
+        None
+    }
+    /// Whether this cmd advances the step counter. Defaults to `true`.
+    /// `$` returns `false`: it replaces the current value but is not itself
+    /// addressable.
+    fn produces_step(&self) -> bool {
+        true
+    }
+    /// Push every step index this cmd references into `out` (for the static
+    /// pre-scan of which slots need storage). Default no-op.
+    fn refs(&self, _out: &mut Vec<usize>) {}
     /// If `Some`, the framework uses this result and skips all shape dispatch +
     /// leaf-mapping. For cmds that want to see the whole Value verbatim
     /// (e.g. structural debug).
@@ -88,6 +115,21 @@ macro_rules! cmds {
         )+
 
         impl Executor for Command {
+            fn apply_pipeline(&self, store: &StepStore) -> Option<Result<Value>> {
+                match self {
+                    $( Command::$ty(inner) => inner.apply_pipeline(store), )+
+                }
+            }
+            fn produces_step(&self) -> bool {
+                match self {
+                    $( Command::$ty(inner) => inner.produces_step(), )+
+                }
+            }
+            fn refs(&self, out: &mut Vec<usize>) {
+                match self {
+                    $( Command::$ty(inner) => inner.refs(out), )+
+                }
+            }
             fn apply(&self, v: &Value) -> Option<Result<Value>> {
                 match self {
                     $( Command::$ty(inner) => inner.apply(v), )+
@@ -115,19 +157,19 @@ macro_rules! cmds {
             }
         }
 
-        pub fn parse_dispatch(ch: char, rest: &str)
-            -> Option<Result<(Command, &str)>>
+        pub fn parse_dispatch<'a>(ch: char, rest: &'a str, ctx: &ParseCtx)
+            -> Option<Result<(Command, &'a str)>>
         {
             match ch {
                 $( <$ty as Parser>::CHAR =>
-                    Some(<$ty>::parse(rest).map(|(v, n)| (v.into(), n))), )+
+                    Some(<$ty>::parse(rest, ctx).map(|(v, n)| (v.into(), n))), )+
                 _ => None,
             }
         }
     };
 }
 
-cmds! { Split, Join, Number, Dbg }
+cmds! { Split, Join, Number, Dbg, PipeRef }
 
 pub fn apply_to_value(cmd: &Command, v: &Value) -> Result<Value> {
     if let Some(res) = cmd.apply(v) {

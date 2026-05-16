@@ -15,6 +15,22 @@ pub fn str_lit(inp: &str) -> Option<Result<(String, &str)>> {
     Some(escape_str(&s).map(|x| (x, next)))
 }
 
+/// Parse a non-negative decimal integer (1+ ASCII digits).
+/// Returns `None` if input doesn't start with a digit, `Some(Err)` on overflow.
+pub fn int_lit(inp: &str) -> Option<Result<(usize, &str)>> {
+    let end = inp.find(|c: char| !c.is_ascii_digit()).unwrap_or(inp.len());
+    if end == 0 {
+        return None;
+    }
+    let (digits, rest) = inp.split_at(end);
+    Some(
+        digits
+            .parse::<usize>()
+            .map_err(|e| e.to_string())
+            .map(|n| (n, rest)),
+    )
+}
+
 pub fn regex_lit(inp: &str) -> Option<Result<(Regex, &str)>> {
     let (s, next) = match delimited(inp, '/', '/')? {
         Ok(p) => p,
@@ -207,6 +223,45 @@ mod tests {
     #[test]
     fn str_lit_unterminated() {
         assert!(str_lit("\"foo").unwrap().is_err());
+    }
+
+    // int_lit -------------------------------------------------------------
+
+    #[test]
+    fn int_lit_happy() {
+        let (n, rest) = int_lit("123").unwrap().unwrap();
+        assert_eq!(n, 123);
+        assert_eq!(rest, "");
+    }
+
+    #[test]
+    fn int_lit_trailing() {
+        let (n, rest) = int_lit("42xyz").unwrap().unwrap();
+        assert_eq!(n, 42);
+        assert_eq!(rest, "xyz");
+    }
+
+    #[test]
+    fn int_lit_zero() {
+        let (n, rest) = int_lit("0 foo").unwrap().unwrap();
+        assert_eq!(n, 0);
+        assert_eq!(rest, " foo");
+    }
+
+    #[test]
+    fn int_lit_no_digit() {
+        assert!(int_lit("abc").is_none());
+    }
+
+    #[test]
+    fn int_lit_empty() {
+        assert!(int_lit("").is_none());
+    }
+
+    #[test]
+    fn int_lit_overflow() {
+        // Way past usize::MAX.
+        assert!(int_lit("99999999999999999999999999999").unwrap().is_err());
     }
 
     // regex_lit -----------------------------------------------------------

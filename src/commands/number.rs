@@ -1,5 +1,5 @@
 use crate::commands::{
-    Executor, Parser, Result, Value,
+    Executor, ParseCtx, Parser, Result, Value,
     parser::{make_err, skip},
 };
 
@@ -36,7 +36,7 @@ pub struct Number {
 impl Parser for Number {
     const CHAR: char = 'n';
 
-    fn parse(inp: &str) -> Result<(Self, &str)> {
+    fn parse<'a>(inp: &'a str, _ctx: &ParseCtx) -> Result<(Self, &'a str)> {
         let inp = skip(inp);
         let Some(c) = inp.chars().next() else {
             return make_err::<_, Number>(inp, "expected one of f/i/h/o/b (or F/I/H/O/B)");
@@ -179,7 +179,7 @@ mod tests {
     use super::*;
 
     fn run(prog: &str, s: &str) -> Result<Value> {
-        let (n, rest) = Number::parse(prog)?;
+        let (n, rest) = Number::parse(prog, &ParseCtx::new())?;
         assert_eq!(rest, "", "unexpected trailing parser input");
         n.apply_str(s).unwrap()
     }
@@ -201,17 +201,17 @@ mod tests {
 
     #[test]
     fn parse_eof() {
-        assert!(Number::parse("").is_err());
+        assert!(Number::parse("", &ParseCtx::new()).is_err());
     }
 
     #[test]
     fn parse_bad_letter() {
-        assert!(Number::parse("z").is_err());
+        assert!(Number::parse("z", &ParseCtx::new()).is_err());
     }
 
     #[test]
     fn parse_consumes_one_char() {
-        let (_, rest) = Number::parse("ftrailing").unwrap();
+        let (_, rest) = Number::parse("ftrailing", &ParseCtx::new()).unwrap();
         assert_eq!(rest, "trailing");
     }
 

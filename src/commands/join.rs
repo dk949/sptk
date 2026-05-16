@@ -1,7 +1,7 @@
 use std::fmt::Write;
 
 use crate::commands::{
-    Executor, Parser, Result, Value,
+    Executor, ParseCtx, Parser, Result, Value,
     parser::{make_err, skip, str_lit},
 };
 
@@ -12,7 +12,7 @@ pub struct Join {
 impl Parser for Join {
     const CHAR: char = 'J';
 
-    fn parse(inp: &str) -> Result<(Self, &str)> {
+    fn parse<'a>(inp: &'a str, _ctx: &ParseCtx) -> Result<(Self, &'a str)> {
         let inp = skip(inp);
         if let Some(res) = str_lit(inp) {
             let (s, next) = res?;
@@ -48,14 +48,14 @@ mod tests {
 
     #[test]
     fn parse_string_arg() {
-        let (j, rest) = Join::parse("\"-\"after").unwrap();
+        let (j, rest) = Join::parse("\"-\"after", &ParseCtx::new()).unwrap();
         assert_eq!(j.on, "-");
         assert_eq!(rest, "after");
     }
 
     #[test]
     fn parse_missing_arg() {
-        assert!(Join::parse("/regex/").is_err());
+        assert!(Join::parse("/regex/", &ParseCtx::new()).is_err());
     }
 
     #[test]
